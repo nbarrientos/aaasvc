@@ -25,10 +25,11 @@ import (
 
 // AuthenticatorConfig configures the user/pass authenticator
 type AuthenticatorConfig struct {
-	Users         []*User `json:"users"`
-	UsersFile     string  `json:"users_file"`
-	TokenValidity string  `json:"validity"`
-	SigningKey    string  `json:"signing_key"`
+	Users           []*User `json:"users"`
+	UsersFile       string  `json:"users_file"`
+	TokenValidity   string  `json:"validity"`
+	SigningKey      string  `json:"signing_key"`
+	TrustRemoteUser bool    `json:"trust_remote_user"`
 }
 
 // Authenticator is a authenticator with a basic fixed list of users and bcrypt encrypted passwords
@@ -59,12 +60,12 @@ func New(c *AuthenticatorConfig, log *logrus.Entry, site string) (a *Authenticat
 }
 
 // Login logs someone in using a configured user list
-func (a *Authenticator) Login(req *models.LoginRequest) (resp *models.LoginResponse) {
+func (a *Authenticator) Login(req *models.LoginRequest, remoteuser *string) (resp *models.LoginResponse) {
 	timer := authenticators.ProcessTime.WithLabelValues(a.site, "userlist")
 	obs := prometheus.NewTimer(timer)
 	defer obs.ObserveDuration()
 
-	resp = a.processLogin(req)
+	resp = a.processLogin(req, remoteuser)
 	if resp.Error != "" {
 		authenticators.ErrCtr.WithLabelValues(a.site, "userlist").Inc()
 	}
@@ -72,27 +73,52 @@ func (a *Authenticator) Login(req *models.LoginRequest) (resp *models.LoginRespo
 	return resp
 }
 
-func (a *Authenticator) processLogin(req *models.LoginRequest) (resp *models.LoginResponse) {
+func (a *Authenticator) resolveUserName(req *models.LoginRequest, remoteuser *string) (*string, error) {
+	if a.c.TrustRemoteUser && remoteuser != nil {
+		return remoteuser, nil
+	}
+
+	if req != nil {
+		return &(req.Username), nil
+	}
+
+	return nil, errors.New("no identity has been sent")
+}
+
+func (a *Authenticator) processLogin(req *models.LoginRequest, remoteuser *string) (resp *models.LoginResponse) {
 	resp = &models.LoginResponse{}
 
-	user, err := a.getUser(req.Username)
+	username, err := a.resolveUserName(req, remoteuser)
+
 	if err != nil {
-		a.log.Warnf("Login failed for user %s due to a failure while retrieving the user: %s", req.Username, err)
+		a.log.Warnf("Login request with no suitable identity")
+		resp.Error = "Login failed"
+		return
+	}
+
+	user, err := a.getUser(*username)
+
+	if err != nil {
+		a.log.Warnf("Login failed for user %s due to a failure while retrieving the user: %s", *username, err)
 		resp.Error = "Login failed"
 		return
 	}
 
 	if user == nil {
-		a.log.Warnf("Login failed for unknown user %s", req.Username)
+		a.log.Warnf("Login failed for unknown user %s", *username)
 		resp.Error = "Login failed"
 		return
 	}
 
-	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password))
-	if err != nil {
-		a.log.Warnf("Login failed for user %s due to incorrect password", req.Username)
-		resp.Error = "Login failed"
-		return
+	if a.c.TrustRemoteUser && remoteuser != nil {
+		a.log.Warnf("Authenticating user %s password-less", user.Username)
+	} else {
+		err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password))
+		if err != nil {
+			a.log.Warnf("Login failed for user %s due to incorrect password", username)
+			resp.Error = "Login failed"
+			return
+		}
 	}
 
 	claims := map[string]interface{}{
@@ -100,7 +126,7 @@ func (a *Authenticator) processLogin(req *models.LoginRequest) (resp *models.Log
 		"nbf":      time.Now().UTC().Add(-1 * time.Minute).Unix(),
 		"iat":      time.Now().UTC().Unix(),
 		"iss":      "Choria Userlist Authenticator",
-		"callerid": fmt.Sprintf("up=%s", req.Username),
+		"callerid": fmt.Sprintf("up=%s", user.Username),
 		"sub":      "choria_client",
 		"agents":   user.ACLs,
 		"ou":       "choria",
@@ -112,7 +138,7 @@ func (a *Authenticator) processLogin(req *models.LoginRequest) (resp *models.Log
 
 	policy, err := user.OpenPolicy()
 	if err != nil {
-		a.log.Warnf("Reading OPA policy for user %s failed: %s", req.Username, err)
+		a.log.Warnf("Reading OPA policy for user %s failed: %s", user.Username, err)
 		resp.Error = "Login failed"
 		return
 	}
@@ -129,21 +155,21 @@ func (a *Authenticator) processLogin(req *models.LoginRequest) (resp *models.Log
 
 	signKey, err := a.signKey()
 	if err != nil {
-		a.log.Errorf("Could not load signing key during login request for user %s: %s: %s", req.Username, a.c.SigningKey, err)
+		a.log.Errorf("Could not load signing key during login request for user %s: %s: %s", user.Username, a.c.SigningKey, err)
 		resp.Error = "Could not load signing key from disk"
 		return
 	}
 
 	signed, err := token.SignedString(signKey)
 	if err != nil {
-		a.log.Errorf("Could not sign JWT for %s: %s", req.Username, err)
+		a.log.Errorf("Could not sign JWT for %s: %s", user.Username, err)
 		resp.Error = "Could not sign JWT token"
 		return
 	}
 
 	resp.Token = signed
 
-	a.log.Infof("Logged in user %s", req.Username)
+	a.log.Infof("Logged in user %s", user.Username)
 
 	return resp
 

@@ -13,7 +13,7 @@ var mu = &sync.Mutex{}
 
 // Authenticator providers user authentication
 type Authenticator interface {
-	Login(*models.LoginRequest) *models.LoginResponse
+	Login(*models.LoginRequest, *string) *models.LoginResponse
 }
 
 // SetAuthenticator sets the authenticator to use
@@ -33,5 +33,5 @@ func LoginHandler(params operations.PostLoginParams) middleware.Responder {
 		return operations.NewPostLoginOK().WithPayload(&models.LoginResponse{Error: "No authenticator configured"})
 	}
 
-	return operations.NewPostLoginOK().WithPayload(authenticator.Login(params.Request))
+	return operations.NewPostLoginOK().WithPayload(authenticator.Login(params.Request, params.XRemoteUser))
 }

@@ -68,7 +68,7 @@ func New(c *AuthenticatorConfig, log *logrus.Entry, site string) (a *Authenticat
 }
 
 // Login logs someone in using Okta
-func (a *Authenticator) Login(req *models.LoginRequest) (resp *models.LoginResponse) {
+func (a *Authenticator) Login(req *models.LoginRequest, remoteuser *string) (resp *models.LoginResponse) {
 	timer := authenticators.ProcessTime.WithLabelValues(a.site, "okta")
 	obs := prometheus.NewTimer(timer)
 	defer obs.ObserveDuration()

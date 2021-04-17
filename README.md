@@ -99,6 +99,7 @@ The signer uses a JSON file for configuration and lets you compose the system as
   "userlist_authenticator": {
     "signing_key": "/etc/choria/signer/signing/key.pem",
     "validity": "1h",
+    "trust_remote_user": false,
     "users": [
       {
         "username": "puppetadmin",
