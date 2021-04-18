@@ -7,12 +7,12 @@ package operations
 
 import (
 	"context"
-	"io"
 	"net/http"
 
 	"github.com/go-openapi/errors"
 	"github.com/go-openapi/runtime"
 	"github.com/go-openapi/runtime/middleware"
+	"github.com/go-openapi/strfmt"
 	"github.com/go-openapi/validate"
 
 	"github.com/choria-io/aaasvc/api/gen/models"
@@ -35,8 +35,11 @@ type PostLoginParams struct {
 	// HTTP Request Object
 	HTTPRequest *http.Request `json:"-"`
 
+	/*The remote user
+	  In: header
+	*/
+	XRemoteUser *string
 	/*The Login request
-	  Required: true
 	  In: body
 	*/
 	Request *models.LoginRequest
@@ -51,15 +54,15 @@ func (o *PostLoginParams) BindRequest(r *http.Request, route *middleware.Matched
 
 	o.HTTPRequest = r
 
+	if err := o.bindXRemoteUser(r.Header[http.CanonicalHeaderKey("X-Remote-User")], true, route.Formats); err != nil {
+		res = append(res, err)
+	}
+
 	if runtime.HasBody(r) {
 		defer r.Body.Close()
 		var body models.LoginRequest
 		if err := route.Consumer.Consume(r.Body, &body); err != nil {
-			if err == io.EOF {
-				res = append(res, errors.Required("request", "body", ""))
-			} else {
-				res = append(res, errors.NewParseError("request", "body", "", err))
-			}
+			res = append(res, errors.NewParseError("request", "body", "", err))
 		} else {
 			// validate body object
 			if err := body.Validate(route.Formats); err != nil {
@@ -75,11 +78,26 @@ func (o *PostLoginParams) BindRequest(r *http.Request, route *middleware.Matched
 				o.Request = &body
 			}
 		}
-	} else {
-		res = append(res, errors.Required("request", "body", ""))
 	}
 	if len(res) > 0 {
 		return errors.CompositeValidationError(res...)
 	}
+	return nil
+}
+
+// bindXRemoteUser binds and validates parameter XRemoteUser from header.
+func (o *PostLoginParams) bindXRemoteUser(rawData []string, hasKey bool, formats strfmt.Registry) error {
+	var raw string
+	if len(rawData) > 0 {
+		raw = rawData[len(rawData)-1]
+	}
+
+	// Required: false
+
+	if raw == "" { // empty values pass all other validations
+		return nil
+	}
+	o.XRemoteUser = &raw
+
 	return nil
 }

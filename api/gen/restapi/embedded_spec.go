@@ -45,10 +45,15 @@ func init() {
             "description": "The Login request",
             "name": "request",
             "in": "body",
-            "required": true,
             "schema": {
               "$ref": "#/definitions/LoginRequest"
             }
+          },
+          {
+            "type": "string",
+            "description": "The remote user",
+            "name": "X-Remote-User",
+            "in": "header"
           }
         ],
         "responses": {
@@ -178,10 +183,15 @@ func init() {
             "description": "The Login request",
             "name": "request",
             "in": "body",
-            "required": true,
             "schema": {
               "$ref": "#/definitions/LoginRequest"
             }
+          },
+          {
+            "type": "string",
+            "description": "The remote user",
+            "name": "X-Remote-User",
+            "in": "header"
           }
         ],
         "responses": {

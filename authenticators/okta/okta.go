@@ -68,7 +68,7 @@ func New(c *AuthenticatorConfig, log *logrus.Entry, site string) (a *Authenticat
 }
 
 // Login logs someone in using Okta
-func (a *Authenticator) Login(req *models.LoginRequest) (resp *models.LoginResponse) {
+func (a *Authenticator) Login(req *models.LoginRequest, ru *string) (resp *models.LoginResponse) {
 	timer := authenticators.ProcessTime.WithLabelValues(a.site, "okta")
 	obs := prometheus.NewTimer(timer)
 	defer obs.ObserveDuration()
@@ -87,6 +87,12 @@ func (a *Authenticator) Login(req *models.LoginRequest) (resp *models.LoginRespo
 
 func (a *Authenticator) processLogin(req *models.LoginRequest) (resp *models.LoginResponse) {
 	resp = &models.LoginResponse{}
+
+	if req == nil {
+		a.log.Warnf("Login failed due to missing message body")
+		resp.Error = "Login failed"
+		return
+	}
 
 	_, _, err := a.login(req.Username, req.Password)
 	if err != nil {
