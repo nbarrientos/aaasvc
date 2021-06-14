@@ -9,6 +9,7 @@ import (
 	"github.com/choria-io/aaasvc/auditors"
 	"github.com/choria-io/aaasvc/authenticators"
 	"github.com/choria-io/aaasvc/authenticators/okta"
+	"github.com/choria-io/aaasvc/authenticators/remoteuser"
 	"github.com/choria-io/aaasvc/authenticators/userlist"
 	jwt "github.com/dgrijalva/jwt-go"
 	"github.com/sirupsen/logrus"
@@ -41,6 +42,7 @@ type Config struct {
 	//
 	// * okta - performs authentication against Okta
 	// * userlist - basic user/password/acl list
+	// * remoteuser - delegated login with default acls
 	AuthenticatorType string `json:"authenticator"`
 
 	// AuditorType is the types of auditor to use, multiple will be called concurrently
@@ -87,6 +89,9 @@ type Config struct {
 
 	// UserlistsAuthenticator is a configuration for the `userlist` AuthorizerType
 	UserlistsAuthenticator *userlist.AuthenticatorConfig `json:"userlist_authenticator"`
+
+	// RemoteuserAuthenticator is a configuration for the `remoteuser` AuthorizerType
+	RemoteuserAuthenticator *remoteuser.AuthenticatorConfig `json:"remoteuser_authenticator"`
 
 	// TLSCertificate is the certificate to use for listening on login/sign requests
 	TLSCertificate string `json:"tls_certificate"`
@@ -188,6 +193,13 @@ func configureAuthenticator(conf *Config) error {
 		}
 
 		auth, err = userlist.New(conf.UserlistsAuthenticator, conf.Logger("authenticator"), conf.Site)
+
+	case "remoteuser":
+		if conf.RemoteuserAuthenticator == nil {
+			return fmt.Errorf("remoteuser authenticator enabled without a valid configuration")
+		}
+
+		auth, err = remoteuser.New(conf.RemoteuserAuthenticator, conf.Logger("authenticator"), conf.Site)
 
 	default:
 		err = errors.Errorf("unknown authenticator: %s", conf.AuthenticatorType)

@@ -21,9 +21,14 @@ paths:
       - in: "body"
         name: "request"
         description: "The Login request"
-        required: true
+        required: false
         schema:
           $ref: "#/definitions/LoginRequest"
+      - in: "header"
+        name: "X-Remote-User"
+        description: "The remote user"
+        required: false
+        type: string
 
       responses:
         "200":

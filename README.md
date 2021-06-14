@@ -35,6 +35,7 @@ This is under active development, see the Issues list for current outstanding it
  * Authentication
    * [Okta identity cloud](https://okta.com/)
    * Static configured users with support for basic agent+action ACLs as well as Open Policy Agent policies
+   * Login delegation via X-Remote-User
    * Capable of running centrally separate from signers
    * Supports setting the Choria Organization claim for multi tenancy (not for okta users)
  * Authorization
@@ -311,6 +312,29 @@ Once you signed up for Okta and set up a application for Choria you'll get endpo
 ```
 
 Here we configure `acls` based on Okta groups - all users can `rpcutil ping`, there are Puppet admins with appropriate rights and fleet wide admins capable of managing anything.
+
+#### Login delegation via `X-Remote-User`
+
+It's possible to delegate the responsibility of verifying the users' identity to a front-end configured using the mechanism of your choice (Kerberos, OIDC, etc) and setting the identity of the caller in the `X-Remote-User` HTTP header. In this case, configure the `remoteuser` authenticator and make sure that the entrypoint `/login` is well protected. All users will receive the same ACLs et al, configured via `default_user`.
+
+```json
+{
+  "authenticator": "remoteuser",
+  "remote_authenticator": {
+    "validity": "1h",
+    "signing_key": "/etc/choria/signer/signing_key.pem",
+    "default_user": {
+        "acls": [
+            "puppet.*"
+        ],
+        "properties": {
+            "group": "users"
+        },
+        "organization": "acme"
+    }
+  }
+}
+```
 
 ## Authorization
 
